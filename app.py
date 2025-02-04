@@ -1,13 +1,17 @@
 from flask import Flask
 from config import Config
-from extensions import db, migrate
+from extensions import db
 from flask_cors import CORS
+from flask_migrate import Migrate
 
 def create_app():
     app = Flask(__name__)
 
+    migrate = Migrate(app,db)
+
     # Carregar configurações
     app.config.from_object(Config)
+
 
     # Inicializar as extensões
     db.init_app(app)

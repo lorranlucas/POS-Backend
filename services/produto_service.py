@@ -1,56 +1,151 @@
+import os
 from extensions import db
-from models import Produto, Etapa, EtapaAcompanhamento
+from flask import current_app
+from werkzeug.utils import secure_filename
+from models import Produto, Etapa, EtapaAcompanhamento,Composicao,Categoria
 
+import uuid
+
+from werkzeug.datastructures import FileStorage
+
+import os
+from werkzeug.utils import secure_filename
+
+UPLOAD_FOLDER = "uploads/produtos"
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
+
+# Certifique-se de criar a pasta de upload
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+    
 def criar_produto(produto_data):
-    # Garantir que 'tipo' está presente
+    print("Dados recebidos: ", produto_data)
     tipo = produto_data.get('tipo')
     if not tipo:
         raise ValueError("O campo 'tipo' é obrigatório.")
 
-    # Criar novo produto
+    foto = produto_data.get('foto')  # Foto como arquivo
+
+    disponibilidade = produto_data.get('disponibilidade', False)
+    if isinstance(disponibilidade, str):
+        disponibilidade = disponibilidade.lower() in ['true', '1', 'yes', 'sim']
+
     novo_produto = Produto(
-        nome=produto_data['nome'],
+        nome=produto_data.get('nome'),
         descricao=produto_data.get('descricao'),
         tipo=tipo,
         codigo_de_barra=produto_data.get('codigo_de_barra'),
-        disponibilidade=produto_data['disponibilidade'],
-        preco=produto_data.get('preco'),
+        disponibilidade=disponibilidade,
+        preco=produto_data.get('preco', 0.00),
         id_und_med=produto_data.get('id_und_med'),
-        foto=produto_data.get('foto')
+        foto=foto,  # Caminho salvo no banco
+        id_categoria=produto_data.get('categoria'),
+        id_fornecedor=produto_data.get('id_fornecedor'),
+        id_setor=produto_data.get('setor')
     )
 
-    # Adicionar o produto à sessão
     db.session.add(novo_produto)
-
-    # Se for tipo 'combo' e existir 'etapas', adicionar as etapas
+    db.session.commit()
+    
+    # Agora podemos acessar o novo_produto.id, pois o produto foi persistido e o ID foi gerado
+    print(f"Produto criado com ID: {novo_produto.id}")
+    
+    # Se o produto for do tipo 'combo', processa as etapas e acompanhamentos
     if tipo == 'combo' and 'etapas' in produto_data:
         for etapa_data in produto_data['etapas']:
-            # Criar a etapa
-            etapa = Etapa(produto_id=novo_produto.id, nome=etapa_data['nome'], posicao=etapa_data['posicao'])
+            etapa = Etapa(
+                produto_id=novo_produto.id,  # Atribuindo o produto_id
+                nome=etapa_data['nome'],
+                posicao=etapa_data['posicao']
+            )
             db.session.add(etapa)
-
-            # Verificar e adicionar acompanhamentos, se existirem
+            db.session.commit()
+            
             if 'acompanhamentos' in etapa_data and isinstance(etapa_data['acompanhamentos'], list):
                 for acompanhamento_data in etapa_data['acompanhamentos']:
+                    # Verificando se o preço do acompanhamento é válido
+                    acompanhamento_preco = acompanhamento_data.get('valor', '')
+                    if acompanhamento_preco == '' or not isinstance(acompanhamento_preco, (int, float)):
+                        acompanhamento_preco = 0.00  # Defina um valor padrão para preços inválidos ou vazios
+                    
+                    # Agora associando o id_etapa corretamente
                     acompanhamento = EtapaAcompanhamento(
-                        id_etapa=etapa.id,
-                        id_produto=acompanhamento_data['id_produto'],
-                        preco=acompanhamento_data.get('preco')  # Preço opcional
+                        id_etapa=etapa.id,  # Atribuindo o id_etapa da etapa
+                        id_produto=acompanhamento_data['id'],
+                        preco=acompanhamento_preco
                     )
                     db.session.add(acompanhamento)
+                    db.session.commit()
 
-    # Commit único após todas as inserções
+    # Se o produto for do tipo 'composicao', processa as composições
+    elif tipo == 'composicao' and 'composicoes' in produto_data:
+        for composicao_lista in produto_data['composicoes']:  # Cada item é uma lista, então iteramos sobre elas
+            for composicao_data in composicao_lista:  # Iterando sobre a lista interna de composições
+                composicao = Composicao(
+                    nome=composicao_data['nome'],
+                    descricao=composicao_data.get('descricao'),
+                    preco_adicional=composicao_data.get('preco_adicional', 0.00),
+                    tipo=composicao_data.get('tipo', 'adicional'),
+                    id_produto=novo_produto.id
+                )
+                db.session.add(composicao)
+                db.session.commit()
+                
+
+    # Commit no banco de dados
     db.session.commit()
 
-    # Retornar o produto criado
-    return novo_produto.to_dict()
+
+from flask import jsonify
 
 def listar_produtos():
     try:
-        produtos = Produto.query.all()
+        produtos = Produto.query.all()  # Consulta todos os produtos do banco de dados
+        print('produtos',[produto.to_dict() for produto in produtos])
+        # Converte os objetos para dicionários e retorna uma lista de dicionários
         return [produto.to_dict() for produto in produtos]
     except Exception as e:
-        raise Exception(f"Erro ao listar produtos: {str(e)}")
+        # Em caso de erro, retorna um dicionário de erro
+        return {"error": f"Erro ao listar produtos: {str(e)}"}
+
+def listar_produtos_por_categoria():
+    try:
+        # Consulta as categorias que têm produtos com disponibilidade True
+        categorias = Categoria.query.filter(
+            Categoria.produtos.any(Produto.disponibilidade == True)
+        ).all()  # Somente categorias com produtos disponíveis
+        resultado = []
+
+        for categoria in categorias:
+            categoria_dict = categoria.to_dict()  # Converte a categoria em um dicionário
+            # Adiciona os produtos dessa categoria que têm disponibilidade True, convertendo-os também para dicionário
+            categoria_dict['produtos'] = [
+                produto.to_dict() for produto in categoria.produtos if produto.disponibilidade
+            ]
+            resultado.append(categoria_dict)
+
+        return resultado  # Retorna as categorias que têm produtos com disponibilidade True
+    except Exception as e:
+        raise Exception(f"Erro ao listar produtos por categoria: {str(e)}")
+
+
+
+def listar_produtos_com_etapas_e_acompanhamentos():
+    try:
+
+        produtos = Produto.query.all()
+        resultado = []
+        for produto in produtos:
+            produto_dict = produto.to_dict()
+            produto_dict['etapas'] = [etapa.to_dict() for etapa in produto.etapas]
+            for etapa in produto.etapas:
+                etapa_dicts = [acompanhamento.to_dict() for acompanhamento in etapa.acompanhamentos]
+                produto_dict['etapas_acompanhamentos'] = etapa_dicts
+            resultado.append(produto_dict)
+            print(resultado)
+        return resultado
+    except Exception as e:
+        raise Exception(f"Erro ao listar produtos com etapas e acompanhamentos: {str(e)}")
 
 def atualizar_produto(produto_id, produto_data):
     try:
@@ -66,7 +161,7 @@ def atualizar_produto(produto_id, produto_data):
         produto.preco = produto_data.get('preco', produto.preco)
         produto.id_und_med = produto_data.get('id_und_med', produto.id_und_med)
         produto.foto = produto_data.get('foto', produto.foto)
-        
+
         db.session.commit()
         return produto.to_dict()
     except Exception as e:
@@ -85,21 +180,6 @@ def remover_produto(produto_id):
     except Exception as e:
         db.session.rollback()
         raise Exception(f"Erro ao remover produto: {str(e)}")
-
-def listar_produtos_com_etapas_e_acompanhamentos():
-    try:
-        produtos = Produto.query.all()
-        resultado = []
-        for produto in produtos:
-            produto_dict = produto.to_dict()
-            produto_dict['etapas'] = [etapa.to_dict() for etapa in produto.etapas]
-            for etapa in produto.etapas:
-                etapa_dicts = [acompanhamento.to_dict() for acompanhamento in etapa.acompanhamentos]
-                produto_dict['etapas_acompanhamentos'] = etapa_dicts
-            resultado.append(produto_dict)
-        return resultado
-    except Exception as e:
-        raise Exception(f"Erro ao listar produtos com etapas e acompanhamentos: {str(e)}")
 
 def adicionar_etapa_a_produto(produto_id, etapa_data):
     try:
@@ -158,63 +238,3 @@ def remover_acompanhamento(acompanhamento_id):
     except Exception as e:
         db.session.rollback()
         raise Exception(f"Erro ao remover acompanhamento: {str(e)}")
-
-def atualizar_produto_completo(produto_id, produto_data):
-    try:
-        produto = Produto.query.get(produto_id)
-        if not produto:
-            raise Exception("Produto não encontrado.")
-        
-        # Atualizar o produto
-        produto.nome = produto_data.get('nome', produto.nome)
-        produto.descricao = produto_data.get('descricao', produto.descricao)
-        produto.tipo = produto_data.get('tipo', produto.tipo)
-        produto.codigo_de_barra = produto_data.get('codigo_de_barra', produto.codigo_de_barra)
-        produto.disponibilidade = produto_data.get('disponibilidade', produto.disponibilidade)
-        produto.preco = produto_data.get('preco', produto.preco)
-        produto.id_und_med = produto_data.get('id_und_med', produto.id_und_med)
-        produto.foto = produto_data.get('foto', produto.foto)
-
-        # Atualizar etapas se necessário
-        if 'etapas' in produto_data:
-            for etapa_data in produto_data['etapas']:
-                etapa = Etapa.query.filter_by(produto_id=produto_id, id=etapa_data['id']).first()
-                if etapa:
-                    # Atualizar a etapa existente
-                    etapa.nome = etapa_data.get('nome', etapa.nome)
-                    etapa.posicao = etapa_data.get('posicao', etapa.posicao)
-                else:
-                    # Criar nova etapa se não existir
-                    nova_etapa = Etapa(
-                        produto_id=produto_id, 
-                        nome=etapa_data['nome'], 
-                        posicao=etapa_data['posicao']
-                    )
-                    db.session.add(nova_etapa)
-                    db.session.commit()
-
-                # Atualizar acompanhamentos das etapas
-                if 'acompanhamentos' in etapa_data:
-                    for acompanhamento_data in etapa_data['acompanhamentos']:
-                        acompanhamento = EtapaAcompanhamento.query.filter_by(
-                            id_etapa=etapa.id, id_produto=acompanhamento_data['id_produto']
-                        ).first()
-                        if acompanhamento:
-                            # Atualizar acompanhamento existente
-                            acompanhamento.preco = acompanhamento_data.get('preco', acompanhamento.preco)
-                        else:
-                            # Adicionar novo acompanhamento
-                            novo_acompanhamento = EtapaAcompanhamento(
-                                id_etapa=etapa.id,
-                                id_produto=acompanhamento_data['id_produto'],
-                                preco=acompanhamento_data.get('preco')
-                            )
-                            db.session.add(novo_acompanhamento)
-
-        db.session.commit()
-        return produto.to_dict()
-
-    except Exception as e:
-        db.session.rollback()
-        raise Exception(f"Erro ao atualizar produto completo: {str(e)}")
-
