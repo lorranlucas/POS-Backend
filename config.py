@@ -1,25 +1,21 @@
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
 
-# Carregar variáveis de ambiente do .env
-dotenv_path = os.path.join(os.getcwd(), '.env')
-load_dotenv(dotenv_path=dotenv_path, override=True)
-
-print("Arquivo .env carregado de:", os.path.abspath(dotenv_path))  # Diagnóstico
+# Carrega as variáveis do arquivo .env
+load_dotenv()
 
 class Config:
-    # Pasta para uploads
-    UPLOAD_FOLDER = 'uploads/'  # Diretório para salvar imagens
+    DB_HOST = os.getenv("DB_HOST")
+    DB_USER = os.getenv("DB_USER")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    DB_NAME = os.getenv("DB_NAME")
+    SECRET_KEY = os.getenv("SECRET_KEY")
+    DEBUG = os.getenv("DEBUG") == "True"
 
-    # Variáveis do MySQL
-    MYSQL_USER = os.getenv('MYSQL_USER')
-    MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD')
-    MYSQL_HOST = os.getenv('MYSQL_HOST')
-    MYSQL_DATABASE = os.getenv('MYSQL_DATABASE')
-
-    # URI do SQLAlchemy
-    SQLALCHEMY_DATABASE_URI = (
-        f"mysql+mysqlconnector://{MYSQL_USER}:{MYSQL_PASSWORD}"
-        f"@{MYSQL_HOST}/{MYSQL_DATABASE}"
+    # URL de conexão com o MySQL
+    SQLALCHEMY_DATABASE_URL = (
+        f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
     )
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+# Instância da configuração
+config = Config()
