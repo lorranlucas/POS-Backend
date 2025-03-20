@@ -22,6 +22,10 @@ class Empresa(Base):
     usuarios = relationship('Usuario', back_populates='empresa', cascade="all, delete-orphan")
     balcoes = relationship('Balcao', back_populates='empresa', cascade="all, delete-orphan")
 
+    categorias = relationship("Categoria", backref="empresa", cascade="all, delete-orphan")
+    fornecedores = relationship("Fornecedor", backref="empresa", cascade="all, delete-orphan")
+    setores = relationship("Setor", backref="empresa", cascade="all, delete-orphan")
+
     def __init__(self, nome, cnpj_cpf, email_contato, senha):
         self.nome = nome
         self.cnpj_cpf = self.validar_cnpj_cpf(cnpj_cpf)
