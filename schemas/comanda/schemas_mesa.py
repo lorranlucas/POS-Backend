@@ -1,22 +1,24 @@
 from pydantic import BaseModel
-from typing import List, Optional
-from schemas.comanda.schemas_comanda import ComandaResponse  # Importação corrigida
+from typing import Optional, List
+from schemas.comanda.schemas_comanda import ComandaSchema  # Ajustado para ComandaSchema
 
-# Schema para Mesa
-class MesaBase(BaseModel):
+class MesaCreate(BaseModel):
     codg: str
     posicao: int
     tipo: str
     status: str = "livre"
     area: Optional[str] = None
-
-class MesaCreate(MesaBase):
     empresa_id: int
 
-class MesaResponse(MesaBase):
+class MesaResponse(BaseModel):
     id: int
+    codg: str
+    posicao: int
+    tipo: str
+    status: str
+    area: Optional[str] = None
     empresa_id: int
-    comandas: List[ComandaResponse] = []  # Agora ComandaResponse está corretamente importado
+    comandas: List[ComandaSchema] = []  # Ajustado para ComandaSchema
 
     class Config:
-        from_attributes = True
+        from_attributes = True  # Atualizado para Pydantic V2

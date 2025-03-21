@@ -22,6 +22,8 @@ from models.usuarios.models_pagamento import Pagamento
 from models.cadastro.models_geral import Fornecedor,Categoria,Setor
 from models.comandas.models_comadas import Comanda, ItemComanda
 from models.comandas.models_mesa import Mesa
+from models.estoque.models_estoque import Estoque
+
 
 
 
@@ -61,6 +63,7 @@ app.include_router(produto_router)
 
 app.include_router(mesa_router)
 app.include_router(comanda_router)
+
 
 
 @app.get("/")
