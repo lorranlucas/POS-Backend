@@ -22,6 +22,7 @@ def obter_mesa(mesa_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Mesa não encontrada")
     return mesa
 
+
 @router.get("/", response_model=List[MesaResponse])
 def listar_mesas(db: Session = Depends(get_db)):
     mesas = db.query(Mesa).all()

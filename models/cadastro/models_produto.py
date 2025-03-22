@@ -12,7 +12,8 @@ class Produto(Base):
     descricao = Column(Text)
     tipo = Column(String(50))  # "combo", "solo", "composição"
     codigo_de_barra = Column(String(255))
-    disponibilidade = Column(Boolean)
+    disponibilidade = Column(Boolean, default=True)  # Disponibilidade geral (estoque, ativo, etc.)
+    disponivel_delivery = Column(Boolean, default=True)  # Disponibilidade específica para delivery
     preco = Column(Numeric(10, 2))
     id_und_med = Column(String(255), nullable=True)
     foto = Column(String(255), nullable=True)
@@ -37,6 +38,7 @@ class Produto(Base):
             "tipo": self.tipo,
             "codigo_de_barra": self.codigo_de_barra,
             "disponibilidade": self.disponibilidade,
+            "disponivel_delivery": self.disponivel_delivery,  # Novo campo adicionado ao dicionário
             "preco": str(self.preco) if self.preco is not None else None,
             "id_und_med": self.id_und_med,
             "id_fornecedor": self.id_fornecedor,
@@ -50,14 +52,15 @@ class Produto(Base):
     def __repr__(self):
         return f"<Produto {self.nome}>"
 
+# Os outros modelos (Composicao, Etapa, EtapaAcompanhamento) permanecem iguais
 # Modelo Composicao
 class Composicao(Base):
     __tablename__ = 'composicao'
     id = Column(Integer, primary_key=True, autoincrement=True)
     nome = Column(String(255), nullable=False)
     descricao = Column(Text)
-    preco_adicional = Column(Numeric(10, 2))  # Preço adicional da composição, se houver
-    tipo = Column(String(50))  # "adicional", "opcional", "extra"
+    preco_adicional = Column(Numeric(10, 2))
+    tipo = Column(String(50))
     id_produto = Column(Integer, ForeignKey('produto.id'))
     empresa_id = Column(Integer, ForeignKey('empresas.id', ondelete='CASCADE'), nullable=False)
 

@@ -9,7 +9,6 @@ from werkzeug.utils import secure_filename
 UPLOAD_FOLDER = "uploads/produtos"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 
-# Certifique-se de criar a pasta de upload
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename: str) -> bool:
@@ -26,16 +25,14 @@ def save_file(file: UploadFile) -> str:
 
 def criar_produto(db: Session, produto_data: ProdutoCreate, empresa_id: int, foto: UploadFile = None):
     try:
-        # Processar a foto, se fornecida
         foto_path = save_file(foto) if foto else None
-
-        # Criar o produto
         db_produto = Produto(
             nome=produto_data.nome,
             descricao=produto_data.descricao,
             tipo=produto_data.tipo,
             codigo_de_barra=produto_data.codigo_de_barra,
             disponibilidade=produto_data.disponibilidade or False,
+            disponivel_delivery=produto_data.disponivel_delivery if produto_data.disponivel_delivery is not None else True,  # Novo campo
             preco=produto_data.preco or 0.00,
             id_und_med=produto_data.id_und_med,
             foto=foto_path,
@@ -48,7 +45,6 @@ def criar_produto(db: Session, produto_data: ProdutoCreate, empresa_id: int, fot
         db.commit()
         db.refresh(db_produto)
 
-        # Processar etapas para combos
         if produto_data.tipo == 'combo' and produto_data.etapas:
             for etapa_data in produto_data.etapas:
                 db_etapa = Etapa(
@@ -72,7 +68,6 @@ def criar_produto(db: Session, produto_data: ProdutoCreate, empresa_id: int, fot
                         db.add(db_acomp)
                         db.commit()
 
-        # Processar composições
         if produto_data.tipo == 'composicao' and produto_data.composicoes:
             for comp_data in produto_data.composicoes:
                 db_comp = Composicao(
@@ -92,38 +87,44 @@ def criar_produto(db: Session, produto_data: ProdutoCreate, empresa_id: int, fot
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Erro ao criar produto: {str(e)}")
 
-def listar_produtos(db: Session, empresa_id: int):
+def listar_produtos(db: Session, empresa_id: int, disponivel_delivery: bool | None = None):
     try:
-        produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
-        return produtos
+        query = db.query(Produto).filter(Produto.empresa_id == empresa_id)
+        if disponivel_delivery is not None:
+            query = query.filter(Produto.disponivel_delivery == disponivel_delivery)
+        return query.all()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao listar produtos: {str(e)}")
 
-def listar_produtos_por_categoria(db: Session, empresa_id: int):
+def listar_produtos_por_categoria(db: Session, empresa_id: int, disponivel_delivery: bool | None = None):
     try:
-        categorias = db.query(Categoria).filter(
-            Categoria.empresa_id == empresa_id,
-            Categoria.produtos.any(Produto.disponibilidade == True)
-        ).all()
-        resultado = []
-        for categoria in categorias:
-            categoria_dict = categoria.to_dict()
-            categoria_dict['produtos'] = [
-                produto.to_dict() for produto in categoria.produtos if produto.disponibilidade
-            ]
-            resultado.append(categoria_dict)
+        query = db.query(Categoria).filter(Categoria.empresa_id == empresa_id)
+        if disponivel_delivery is not None:
+            query = query.filter(Categoria.produtos.any(Produto.disponivel_delivery == disponivel_delivery))
+        else:
+            query = query.filter(Categoria.produtos.any(Produto.disponibilidade == True))
+        categorias = query.all()
+        resultado = [
+            {
+                **categoria.to_dict(),
+                'produtos': [
+                    produto.to_dict() for produto in categoria.produtos 
+                    if produto.disponibilidade and (disponivel_delivery is None or produto.disponivel_delivery == disponivel_delivery)
+                ]
+            }
+            for categoria in categorias
+        ]
         return resultado
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao listar produtos por categoria: {str(e)}")
 
-def listar_produtos_com_etapas_e_acompanhamentos(db: Session, empresa_id: int):
+def listar_produtos_com_etapas_e_acompanhamentos(db: Session, empresa_id: int, disponivel_delivery: bool | None = None):
     try:
-        produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
-        resultado = []
-        for produto in produtos:
-            produto_dict = produto.to_dict()
-            resultado.append(produto_dict)
-        return resultado
+        query = db.query(Produto).filter(Produto.empresa_id == empresa_id)
+        if disponivel_delivery is not None:
+            query = query.filter(Produto.disponivel_delivery == disponivel_delivery)
+        produtos = query.all()
+        return [produto.to_dict() for produto in produtos]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao listar produtos com etapas: {str(e)}")
 
@@ -133,13 +134,11 @@ def atualizar_produto(db: Session, produto_id: int, produto_data: ProdutoCreate,
         if not produto:
             raise HTTPException(status_code=404, detail="Produto não encontrado")
 
-        # Atualizar foto, se fornecida
         if foto:
             produto.foto = save_file(foto)
 
-        # Atualizar campos
         for key, value in produto_data.dict(exclude_unset=True).items():
-            if key not in ['etapas', 'composicoes']:  # Ignorar etapas e composições por enquanto
+            if key not in ['etapas', 'composicoes']:
                 setattr(produto, key, value)
         db.commit()
         db.refresh(produto)
@@ -162,6 +161,7 @@ def remover_produto(db: Session, produto_id: int, empresa_id: int):
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Erro ao remover produto: {str(e)}")
 
+# As funções de etapas e acompanhamentos permanecem inalteradas
 def adicionar_etapa_a_produto(db: Session, produto_id: int, etapa_data: EtapaCreate, empresa_id: int):
     try:
         produto = db.query(Produto).filter(Produto.id == produto_id, Produto.empresa_id == empresa_id).first()

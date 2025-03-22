@@ -23,12 +23,28 @@ async def create_fornecedor(
 ):
     return FornecedorService.create_fornecedor(db, fornecedor, empresa.id)
 
+from fastapi import Query
+
+
+# Atualizar list_fornecedores para suportar paginação e filtro
 @router.get("/", response_model=List[Fornecedor])
 async def list_fornecedores(
+    pagina: int = Query(1, ge=1),  # ge=1 significa "maior ou igual a 1"
+    itens_por_pagina: int = Query(5, ge=1, le=100),  # Limite máximo de 100 itens
+    filtro: str = Query(''),
     empresa: Empresa = Depends(get_current_empresa),
     db: Session = Depends(get_db)
 ):
-    return FornecedorService.get_fornecedores(db, empresa.id)
+    query = db.query(Fornecedor).filter(Fornecedor.empresa_id == empresa.id)
+    if filtro:
+        query = query.filter(
+            (Fornecedor.nome.ilike(f'%{filtro}%')) |
+            (Fornecedor.codigo.ilike(f'%{filtro}%')) |
+            (Fornecedor.email.ilike(f'%{filtro}%'))
+        )
+    total = query.count()
+    fornecedores = query.offset((pagina - 1) * itens_por_pagina).limit(itens_por_pagina).all()
+    return {"items": fornecedores, "total": total}
 
 @router.get("/{fornecedor_id}", response_model=Fornecedor)
 async def get_fornecedor(

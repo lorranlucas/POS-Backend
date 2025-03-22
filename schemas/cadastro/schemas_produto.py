@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from decimal import Decimal
 
-# Schema Composicao
+# Schema Composicao (sem alterações)
 class ComposicaoBase(BaseModel):
     nome: str
     descricao: Optional[str] = None
@@ -20,7 +20,7 @@ class Composicao(ComposicaoBase):
     class Config:
         from_attributes = True
 
-# Schema EtapaAcompanhamento
+# Schema EtapaAcompanhamento (sem alterações)
 class EtapaAcompanhamentoBase(BaseModel):
     id_produto: int
     preco: Optional[Decimal] = None
@@ -36,7 +36,7 @@ class EtapaAcompanhamento(EtapaAcompanhamentoBase):
     class Config:
         from_attributes = True
 
-# Schema Etapa
+# Schema Etapa (sem alterações)
 class EtapaBase(BaseModel):
     nome: str
     posicao: Optional[int] = None
@@ -53,13 +53,14 @@ class Etapa(EtapaBase):
     class Config:
         from_attributes = True
 
-# Schema Produto
+# Schema Produto (atualizado com disponivel_delivery)
 class ProdutoBase(BaseModel):
     nome: str
     descricao: Optional[str] = None
     tipo: Optional[str] = None
     codigo_de_barra: Optional[str] = None
     disponibilidade: Optional[bool] = None
+    disponivel_delivery: Optional[bool] = True  # Novo campo com valor padrão
     preco: Optional[Decimal] = None
     id_und_med: Optional[str] = None
     foto: Optional[str] = None
@@ -79,4 +80,3 @@ class Produto(ProdutoBase):
 
     class Config:
         from_attributes = True
-
